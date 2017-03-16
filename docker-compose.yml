@@ -1,121 +1,231 @@
 version: '2'
 services:
-  ingestfrontend:
-    container_name: ingestfrontend
-    build:
-      context: .
-      dockerfile: Dockerfile.wsgi
-    links:
-     - uniqueid:uniqueid
-     - metadataserver:metadataserver
-     - archiveinterface:archiveinterface
-     - policyserver:policyserver
-     - ingestrabbit:ingestrabbit
-     - ingestmysql:ingestmysql
-    ports:
-     - 8066:8066
-    volumes:
-     - /tmp/ingest:/srv
-    environment:
-      VOLUME_PATH: /srv
+    # uploaderauth:
+    #     build:
+    #         context: .
+    #         dockerfile: Dockerfile.auth
+    #     links:
+    #         - uploaddjango:uploader
+    #     ports:
+    #         - 80:80
+    #     environment:
+    #         BACKEND_PORT_80_TCP_ADDR: uploader
+    #         BACKEND_PORT_80_TCP_PORT: 8000
 
-  ingestbackend:
-    container_name: ingestbackend
-    build:
-      context: .
-      dockerfile: Dockerfile.celery
-    links:
-     - uniqueid:uniqueid
-     - metadataserver:metadataserver
-     - archiveinterface:archiveinterface
-     - policyserver:policyserver
-     - ingestrabbit:ingestrabbit
-     - ingestmysql:ingestmysql
-    volumes:
-     - /tmp/ingest:/srv
-    environment:
-      VOLUME_PATH: /srv
+    # baseimage:
+    #     build:
+    #         context: ../uploader
+    #     image: pacifica/uploader:local
 
-  ingestmysql:
-    image: mysql
-    container_name: ingestmysql
-    environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: pacifica_ingest
-      MYSQL_USER: ingest
-      MYSQL_PASSWORD: ingest
-    ports:
-     - 3306:3306
+    # uploadamqp:
+    #     image: rabbitmq:latest
+    #
+    # uploaddjango:
+    #     build:
+    #         context: ../uploader
+    #     volumes:
+    #         # - /srv:/srv
+    #         - /Users/d3k857/Downloads/srv:/srv
+    #         - ./:/home/centos
+    #
+    #     links:
+    #         - uploadamqp
+    #         - policyserver:policyserver
+    #         - ingestfrontend:ingest
+    #
+    #     environment:
+    #         AMQP_PORT_5672_TCP_ADDR: uploadamqp
+    #         AMQP_PORT_5672_TCP_PORT: 5672
+    #     ports:
+    #         - 8000:8000
 
-  ingestrabbit:
-    image: rabbitmq
-    container_name: ingestrabbit
-    ports:
-     - 5672:5672
+    # uploadcelery:
+    #     build:
+    #         context: .
+    #         dockerfile: Dockerfile.celery
+    #     volumes:
+    #         # - /srv:/srv
+    #         - /Users/d3k857/Downloads/srv:/srv
+    #     links:
+    #         - uploadamqp
+    #     environment:
+    #         AMQP_PORT_5672_TCP_ADDR: uploadamqp
+    #         AMQP_PORT_5672_TCP_PORT: 5672
 
-  uniqueidmysql:
-    image: mysql
-    container_name: uniqueidmysql
-    environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: pacifica_uniqueid
-      MYSQL_USER: uniqueid
-      MYSQL_PASSWORD: uniqueid
+    ingestfrontend:
+        container_name: ingestfrontend
+        build:
+            context: .
+            dockerfile: Dockerfile.wsgi
+        links:
+            - ingestmysql:ingestmysql
+            - uniqueid:uniqueid
+            - metadataserver:metadataserver
+            - archiveinterface:archiveinterface
+            - policyserver:policyserver
+            - ingestrabbit:ingestrabbit
+        ports:
+            - 8066:8066
+        volumes:
+            # - /tmp/ingest:/srv
+            - /Users/d3k857/Downloads/srv:/srv
+        environment:
+            VOLUME_PATH: /srv
+            POLICY_SERVER: policyserver
+            POLICY_PORT: 8181
+            MYSQL_ENV_MYSQL_DATABASE: pacifica_ingest
+            MYSQL_PORT_3306_TCP_ADDR: ingestmysql
+            MYSQL_PORT_3306_TCP_PORT: 3306
+            MYSQL_ENV_MYSQL_USER: ingest
+            MYSQL_ENV_MYSQL_PASSWORD: ingest
+            METADATA_SERVER: metadataserver
+            ARCHIVEINTERFACE_SERVER: archiveinterface
+            UNIQUEID_SERVER: uniqueid
+            BROKER_SERVER: ingestrabbit
 
-  uniqueid:
-    image: pacifica/uniqueid
-    container_name: uniqueid
-    links:
-      - uniqueidmysql:mysql
-    ports:
-      - 8051:8051
-    environment:
-      MYSQL_ENV_MYSQL_DATABASE: pacifica_uniqueid
-      MYSQL_PORT_3306_TCP_ADDR: mysql
-      MYSQL_PORT_3306_TCP_PORT: 3306
-      MYSQL_ENV_MYSQL_USER: uniqueid
-      MYSQL_ENV_MYSQL_PASSWORD: uniqueid
+    ingestbackend:
+        container_name: ingestbackend
+        build:
+            context: .
+            dockerfile: Dockerfile.celery
+        links:
+            - uniqueid:uniqueid
+            - metadataserver:metadataserver
+            - archiveinterface:archiveinterface
+            - policyserver:policyserver
+            - ingestrabbit:ingestrabbit
+            - ingestmysql:ingestmysql
+        volumes:
+            # - /tmp/ingest:/srv
+            - /Users/d3k857/Downloads/srv:/srv
+        environment:
+            VOLUME_PATH: /srv
+            POLICY_SERVER: policyserver
+            POLICY_PORT: 8181
+            MYSQL_ENV_MYSQL_DATABASE: pacifica_ingest
+            MYSQL_PORT_3306_TCP_ADDR: ingestmysql
+            MYSQL_PORT_3306_TCP_PORT: 3306
+            MYSQL_ENV_MYSQL_USER: ingest
+            MYSQL_ENV_MYSQL_PASSWORD: ingest
+            METADATA_SERVER: metadataserver
+            ARCHIVEINTERFACE_SERVER: archiveinterface
+            UNIQUEID_SERVER: uniqueid
+            BROKER_SERVER: ingestrabbit
 
-  archiveinterface:
-    image: pacifica/archiveinterface
-    container_name: archiveinterface
-    ports:
-      - 8080:8080
+    ingestmysql:
+        image: mysql
+        container_name: ingestmysql
+        environment:
+            MYSQL_ROOT_PASSWORD: root
+            MYSQL_DATABASE: pacifica_ingest
+            MYSQL_USER: ingest
+            MYSQL_PASSWORD: ingest
+        ports:
+            - 3306:3306
 
-  policyserver:
-    image: pacifica/policy
-    container_name: policyserver
-    links:
-      - metadataserver:metadata
-    ports:
-      - 8181:8181
-    environment:
-      METADATA_PORT: tcp://metadata:8121
+    ingestrabbit:
+        image: rabbitmq
+        container_name: ingestrabbit
+        ports:
+            - 5672:5672
 
-  elasticdb:
-    image: elasticsearch:2.4
-    container_name: elasticdb
+    uniqueidmysql:
+        image: mysql
+        container_name: uniqueidmysql
+        environment:
+            MYSQL_ROOT_PASSWORD: root
+            MYSQL_DATABASE: pacifica_uniqueid
+            MYSQL_USER: uniqueid
+            MYSQL_PASSWORD: uniqueid
 
-  metadatadb:
-    image: postgres
-    container_name: metadatadb
-    environment:
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: pacifica_metadata
-      POSTGRES_USER: metadata
+    uniqueid:
+        # image: pacifica/uniqueid
+        build:
+            context: ../uniqueid
+        container_name: uniqueid
+        links:
+            - uniqueidmysql:mysql
+        ports:
+            - 8051:8051
+        environment:
+            MYSQL_ENV_MYSQL_DATABASE: pacifica_uniqueid
+            MYSQL_PORT_3306_TCP_ADDR: uniqueidmysql
+            MYSQL_PORT_3306_TCP_PORT: 3306
+            MYSQL_ENV_MYSQL_USER: uniqueid
+            MYSQL_ENV_MYSQL_PASSWORD: uniqueid
 
-  metadataserver:
-    image: pacifica/metadata
-    container_name: metadataserver
-    links:
-      - metadatadb:postgres
-      - elasticdb:elasticdb
-    ports:
-      - 8121:8121
-    environment:
-      ELASTICDB_PORT: tcp://elasticdb:9200
-      POSTGRES_ENV_POSTGRES_DB: pacifica_metadata
-      POSTGRES_ENV_POSTGRES_USER: metadata
-      POSTGRES_PORT_5432_TCP_ADDR: postgres
-      POSTGRES_PORT_5432_TCP_PORT: 5432
-      POSTGRES_ENV_POSTGRES_PASSWORD: password
+    archiveinterface:
+        image: pacifica/archiveinterface
+        container_name: archiveinterface
+        ports:
+            - 8080:8080
+
+    policyserver:
+        build:
+            context: ../policy
+        container_name: policyserver
+        restart: unless-stopped
+        links:
+            - metadataserver:metadata
+        ports:
+            - 8181:8181
+        environment:
+            METADATA_PORT: tcp://metadata:8121
+
+    # policyserver:
+    #     image: pacifica/policy
+    #     container_name: policyserver
+    #     links:
+    #         - metadataserver:metadata
+    #     ports:
+    #         - 8181:8181
+    #     environment:
+    #         METADATA_PORT: tcp://metadata:8121
+
+    elasticdb:
+        image: elasticsearch:2.4
+        container_name: elasticdb
+
+    metadatadb:
+        image: postgres
+        container_name: metadatadb
+        environment:
+            POSTGRES_PASSWORD: pacifica
+            POSTGRES_DB: pacifica_metadata
+            POSTGRES_USER: pacifica
+        ports:
+            - 5432:5432
+
+
+    metadataserver:
+        build:
+            context: ../metadata
+        container_name: metadataserver
+        links:
+            - metadatadb:postgres
+            - elasticdb
+        ports:
+            - 8121:8121
+        environment:
+            ELASTICDB_PORT: tcp://elasticdb:9200
+            POSTGRES_ENV_POSTGRES_DB: pacifica_metadata
+            POSTGRES_ENV_POSTGRES_USER: pacifica
+            POSTGRES_PORT_5432_TCP_ADDR: postgres
+            POSTGRES_PORT_5432_TCP_PORT: 5432
+            POSTGRES_ENV_POSTGRES_PASSWORD: pacifica
+
+    # metadataserver:
+    #     image: pacifica/metadata
+    #     container_name: metadataserver
+    #     links:
+    #         - metadatadb:postgres
+    #         - elasticdb:elasticdb
+    #     ports:
+    #         - 8121:8121
+    #     environment:
+    #         ELASTICDB_PORT: tcp://elasticdb:9200
+    #         POSTGRES_ENV_POSTGRES_DB: pacifica_metadata
+    #         POSTGRES_ENV_POSTGRES_USER: metadata
+    #         POSTGRES_PORT_5432_TCP_ADDR: postgres
+    #         POSTGRES_PORT_5432_TCP_PORT: 5432
+    #         POSTGRES_ENV_POSTGRES_PASSWORD: password

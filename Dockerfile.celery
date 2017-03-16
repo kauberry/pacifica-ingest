@@ -1,2 +1,2 @@
 FROM python:2-onbuild
-CMD ["celery", "-A", "ingest.backend", "worker", "--loglevel=info"]
+CMD ["celery", "-A", "ingest.backend", "worker", "--loglevel=debug"]
