@@ -161,11 +161,9 @@ class MetaParser(object):
 
         for meta in meta_list:
             if meta['destinationTable'] == 'Files':
-                clipped = get_clipped (meta['subdir'])
-                meta['subdir'] = get_clipped (meta['subdir'])
+                meta['subdir'] = get_clipped(meta['subdir'])
 
         self.meta_str = json.dumps(meta_list, sort_keys=True, indent=4)
-
 
     def post_metadata(self):
         """Upload metadata to server."""
@@ -192,11 +190,13 @@ class MetaParser(object):
             return False
         # pylint: enable=broad-except
 
+
 def get_clipped(fname):
     """Return a file path with the data separator removed."""
     if fname.startswith('data/'):
-      fname = fname[5:]
+        fname = fname[5:]
     return fname
+
 
 # pylint: disable=too-few-public-methods
 class TarIngester(object):
@@ -221,7 +221,7 @@ class TarIngester(object):
             file_hash = self.meta.get_hash(file_id)
             name = self.meta.get_fname(file_id)
 
-            path = self.meta.get_subdir(file_id)+'/'+name
+            path = os.path.join(self.meta.get_subdir(file_id), name)
 
             info = self.tar.getmember(path)
             print(info.name)

@@ -41,10 +41,11 @@ class IngestState(BaseModel):
         Make sure database is connected.
 
         Trying to connect a second
-        time doesnt cause any problems.
+        time *does* cause problems.
         """
         # pylint: disable=no-member
-        cls._meta.database.connect()
+        if cls._meta.database.is_closed():
+            cls._meta.database.connect()
         # pylint: enable=no-member
 
     @classmethod
@@ -53,7 +54,7 @@ class IngestState(BaseModel):
         Close the database connection.
 
         Closing already closed database
-        throws an error so catch it and continue on.
+        is not a problem, so continue on.
         """
         try:
             # pylint: disable=no-member
