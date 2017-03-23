@@ -155,8 +155,8 @@ class MetaParser(object):
         return name
 
     def clean_metadata(self):
-        """ clean /data from filepaths """
 
+        """clean /data from filepaths."""
         meta_list = json.loads(self.meta_str)
 
         for meta in meta_list:
