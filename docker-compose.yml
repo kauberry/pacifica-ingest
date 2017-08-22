@@ -7,9 +7,9 @@ services:
       dockerfile: Dockerfile.wsgi
     links:
      - uniqueid:uniqueid
-     - metadataserver:metadataserver
-     - archiveinterface:archiveinterface
-     - policyserver:policyserver
+     - ingest_metadataserver:metadataserver
+     - ingest_archiveinterface:archiveinterface
+     - ingest_policyserver:policyserver
      - ingestrabbit:ingestrabbit
      - ingestmysql:ingestmysql
     ports:
@@ -18,6 +18,8 @@ services:
      - /tmp/ingest:/srv
     environment:
       VOLUME_PATH: /srv
+      BROKER_SERVER: ingestrabbit
+      MYSQL_PORT_3306_TCP_ADDR: ingestmysql
 
   ingestbackend:
     container_name: ingestbackend
@@ -26,15 +28,17 @@ services:
       dockerfile: Dockerfile.celery
     links:
      - uniqueid:uniqueid
-     - metadataserver:metadataserver
-     - archiveinterface:archiveinterface
-     - policyserver:policyserver
+     - ingest_metadataserver:metadataserver
+     - ingest_archiveinterface:archiveinterface
+     - ingest_policyserver:policyserver
      - ingestrabbit:ingestrabbit
      - ingestmysql:ingestmysql
     volumes:
      - /tmp/ingest:/srv
     environment:
       VOLUME_PATH: /srv
+      BROKER_SERVER: ingestrabbit
+      MYSQL_PORT_3306_TCP_ADDR: ingestmysql      
 
   ingestmysql:
     image: mysql
@@ -76,40 +80,36 @@ services:
       MYSQL_ENV_MYSQL_USER: uniqueid
       MYSQL_ENV_MYSQL_PASSWORD: uniqueid
 
-  archiveinterface:
+  ingest_archiveinterface:
     image: pacifica/archiveinterface
-    container_name: archiveinterface
+    container_name: ingest_archiveinterface
     ports:
       - 8080:8080
 
-  policyserver:
+  ingest_policyserver:
     image: pacifica/policy
-    container_name: policyserver
+    container_name: ingest_policyserver
     links:
-      - metadataserver:metadata
+      - ingest_metadataserver:metadata
     ports:
       - 8181:8181
     environment:
       METADATA_PORT: tcp://metadata:8121
 
-  elasticdb:
-    image: elasticsearch:2.4
-    container_name: elasticdb
-
-  metadatadb:
+  ingest_metadatadb:
     image: postgres
-    container_name: metadatadb
+    container_name: ingest_metadatadb
     environment:
       POSTGRES_PASSWORD: password
       POSTGRES_DB: pacifica_metadata
       POSTGRES_USER: metadata
 
-  metadataserver:
+  ingest_metadataserver:
     image: pacifica/metadata
-    container_name: metadataserver
+    container_name: ingest_metadataserver
     links:
-      - metadatadb:postgres
-      - elasticdb:elasticdb
+      - ingest_metadatadb:postgres
+      - ingest_elasticmaster:elasticdb
     ports:
       - 8121:8121
     environment:
@@ -119,3 +119,80 @@ services:
       POSTGRES_PORT_5432_TCP_ADDR: postgres
       POSTGRES_PORT_5432_TCP_PORT: 5432
       POSTGRES_ENV_POSTGRES_PASSWORD: password
+
+  ingest_elasticmaster:
+    image: docker.elastic.co/elasticsearch/elasticsearch:5.5.1
+    container_name: ingest_elasticmaster
+    environment:
+      - cluster.name=pacifica-cluster
+      - bootstrap.memory_lock=true
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    mem_limit: 1g
+    ports:
+      - 9200:9200
+
+  ingest_elasticslave:
+    image: docker.elastic.co/elasticsearch/elasticsearch:5.5.1
+    container_name: ingest_elasticslave
+    environment:
+      - cluster.name=pacifica-cluster
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - xpack.security.enabled=false
+      - discovery.zen.ping.unicast.hosts=ingest_elasticmaster
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    mem_limit: 1g
+
+  ingest_elasticlb:
+    image: dockercloud/haproxy
+    links:
+      - ingest_elasticslave:elasticslave
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+
+# Upload status
+  ingest_uploadstatus:
+    container_name: ingest_uploadstatus
+    build:
+      context: ../upload-status
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./:/var/www/html
+    links:
+      - ingest_metadataserver:metadata
+      - ingest_policyserver:policy
+      # - cartserver:cart
+      - ingest_uploadstatusdb:cartdb
+      # - ingest_archiveinterface:archivei
+    environment:
+      METADATA_PORT: tcp://metadata:8121
+      POLICY_PORT: tcp://policy:8181
+      ARCHIVE_PORT: tcp://archivei:8080
+      CART_PORT: tcp://cart:8081
+      CARTDB_ADDR: cartdb
+      CARTDB_PORT: 5432
+      CARTDB_USER: pacifica
+      CARTDB_PASSWORD: pacifica
+      CARTDB_DB_NAME: pacifica_upload_status
+      CARTDB_DBDRIVER: postgre
+      CART_DOWNLOAD_PORT: tcp://cartng.emsl.pnl.gov:8443
+      FILE_DOWNLOAD_PORT: tcp://filesng.emsl.pnl.gov:8443
+
+  ingest_uploadstatusdb:
+    container_name: ingest_uploadstatusdb
+    image: postgres
+    environment:
+      POSTGRES_PASSWORD: pacifica
+      POSTGRES_DB: pacifica_upload_status
+      POSTGRES_USER: pacifica
+    ports:
+      - 55432:5432
