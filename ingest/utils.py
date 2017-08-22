@@ -6,9 +6,6 @@ from urlparse import parse_qs
 import json
 import requests
 
-# pylint: disable=bare-except
-# pylint: disable=broad-except
-
 
 def get_job_id(environ):
     """Parse the parameters for a request from the environ dictionary."""
@@ -18,8 +15,10 @@ def get_job_id(environ):
             job_id = int(args.get('job_id', [''])[0])
             return job_id
         return (None, None)
-    except:
+    # pylint: disable=broad-except
+    except Exception:
         return (None, None)
+    # pylint: enable=broad-except
 
 
 def valid_request(environ):
@@ -49,11 +48,23 @@ def create_return_params(response_body):
     return (status, response_headers, response_body)
 
 
+def create_state_response(record):
+    """Create the state response body from a record."""
+    state = {
+        'job_id': record.job_id,
+        'state': record.state,
+        'task': record.task,
+        'task_percent': str(record.task_percent),
+        'updated': str(record.updated),
+        'created': str(record.created),
+        'exception': str(record.exception)
+    }
+    return json.dumps(state)
+
+
 def create_state_return(record):
     """Create the dictionary containing the start and stop index packs the message components."""
-    state = {'job_id': record.job_id, 'state': record.state, 'task': record.task,
-             'task_percent': str(record.task_percent)}
-    response_body = json.dumps(state)
+    response_body = create_state_response(record)
     return create_return_params(response_body)
 
 

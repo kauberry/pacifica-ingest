@@ -2,6 +2,7 @@
 """ORM for index server."""
 import os
 import time
+from datetime import datetime
 import peewee
 
 DATABASE_CONNECT_ATTEMPTS = 20
@@ -16,8 +17,10 @@ DB = peewee.MySQLDatabase(os.getenv('MYSQL_ENV_MYSQL_DATABASE', 'pacifica_ingest
 def create_tables(attempts=0):
     """Attempt to connect to the database."""
     try:
+        IngestState.database_connect()
         if not IngestState.table_exists():
             IngestState.create_table()
+        IngestState.database_close()
     except peewee.OperationalError:
         if attempts < DATABASE_CONNECT_ATTEMPTS:
             time.sleep(DATABASE_WAIT)
@@ -44,6 +47,9 @@ class IngestState(BaseModel):
     state = peewee.CharField()
     task = peewee.CharField()
     task_percent = peewee.DecimalField()
+    exception = peewee.TextField(default='')
+    created = peewee.DateTimeField(default=datetime.utcnow)
+    updated = peewee.DateTimeField(default=datetime.utcnow)
 
     @classmethod
     def database_connect(cls):
@@ -54,8 +60,9 @@ class IngestState(BaseModel):
         time *does* cause problems.
         """
         # pylint: disable=no-member
-        if cls._meta.database.is_closed():
-            cls._meta.database.connect()
+        if not cls._meta.database.is_closed():
+            cls._meta.database.close()
+        cls._meta.database.connect()
         # pylint: enable=no-member
 
     @classmethod
@@ -66,13 +73,10 @@ class IngestState(BaseModel):
         Closing already closed database
         is not a problem, so continue on.
         """
-        try:
-            # pylint: disable=no-member
+        # pylint: disable=no-member
+        if not cls._meta.database.is_closed():
             cls._meta.database.close()
-            # pylint: enable=no-member
-        except peewee.ProgrammingError:  # pragma: no cover
-            # error for closing an already closed database so continue on
-            return
+        # pylint: enable=no-member
 
     class Meta(object):
         """Map to uniqueindex table."""
@@ -81,7 +85,7 @@ class IngestState(BaseModel):
 # pylint: enable=too-few-public-methods
 
 
-def update_state(job_id, state, task, task_percent):
+def update_state(job_id, state, task, task_percent, exception=''):
     """Update the state of an ingest job."""
     if job_id and job_id >= 0:
         IngestState.database_connect()
@@ -91,6 +95,8 @@ def update_state(job_id, state, task, task_percent):
         record.state = state
         record.task = task
         record.task_percent = task_percent
+        record.exception = exception
+        record.updated = datetime.utcnow()
         record.save()
         IngestState.database_close()
 

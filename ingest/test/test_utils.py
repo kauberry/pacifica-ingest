@@ -1,6 +1,7 @@
 #!/usr/bin/python
 """Test ingest."""
 from collections import namedtuple
+from datetime import datetime
 import mock
 import peewee
 from ingest.orm import create_tables, IngestState
@@ -66,9 +67,9 @@ def test_create_return_params():
 
 def test_create_state_return():
     """Test the create_state_return method."""
-    record = namedtuple('Record', ['job_id', 'state', 'task', 'task_percent'])
-    rec = record(1, 'test state', 'test task', '12.345')
+    record = namedtuple('Record', ['job_id', 'state', 'task', 'task_percent', 'updated', 'created', 'exception'])
+    rec = record(1, 'test state', 'test task', '12.345', datetime.utcnow(), datetime.utcnow(), '')
     chk = create_state_return(rec)
     assert chk[0] == '200 OK'
     assert len(chk[1]) == 2
-    assert len(chk[2]) == 83
+    assert len(chk[2]) == 182

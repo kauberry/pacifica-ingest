@@ -7,8 +7,13 @@ import hashlib
 import time
 import os
 import requests
-
 from ingest.utils import get_unique_id
+
+
+class HashValidationException(Exception):
+    """Class to capture hashsum validation failures."""
+
+    pass
 
 
 class FileIngester(object):
@@ -20,12 +25,19 @@ class FileIngester(object):
     hashval = None
     server = ''
 
-    def __init__(self, hashcode, server, file_id):
+    def __init__(self, hashtype, hashcode, server, file_id):
         """Constructor for FileIngester class."""
-        self.hashval = hashlib.sha1()
+        if hashtype in hashlib.algorithms_available:
+            self.hashval = getattr(hashlib, hashtype)()
+        else:
+            raise ValueError('Invalid Hashtype {}'.format(hashtype))
         self.recorded_hash = hashcode
         self.server = server
         self.file_id = file_id
+        self.session = requests.session()
+        retry_adapter = requests.adapters.HTTPAdapter(max_retries=5)
+        self.session.mount('https://', retry_adapter)
+        self.session.mount('http://', retry_adapter)
 
     def read(self, size):
         """Read wrapper for requests that calculates the hashcode inline."""
@@ -43,41 +55,34 @@ class FileIngester(object):
 
     def upload_file_in_file(self, info, tar):
         """Upload a file from inside a tar file."""
-        try:
-            self.fileobj = tar.extractfile(info)
-            size = self.fileobj.size
-            size_str = str(size)
-            mod_time = time.ctime(info.mtime)
-            self.fileobj.seek(0)
-            url = self.server + str(self.file_id)
+        self.fileobj = tar.extractfile(info)
+        size = self.fileobj.size
+        size_str = str(size)
+        mod_time = time.ctime(info.mtime)
+        self.fileobj.seek(0)
+        url = self.server + str(self.file_id)
 
-            headers = {}
-            headers['Last-Modified'] = mod_time
-            headers['Content-Type'] = 'application/octet-stream'
-            headers['Content-Length'] = size_str
+        headers = {}
+        headers['Last-Modified'] = mod_time
+        headers['Content-Type'] = 'application/octet-stream'
+        headers['Content-Length'] = size_str
 
-            req = requests.put(
-                url,
-                data=self,
-                headers=headers
-            )
-            self.fileobj.close()
-            body = req.text
-            ret_dict = json.loads(body)
-            size = int(ret_dict['total_bytes'])
-            if size != info.size:  # pragma: no cover
-                return False
-            success = self.validate_hash()
-            print('validated = ' + str(success))
-            if not success:
-                # roll back upload
-                return False
-            return success
-        # pylint: disable=broad-except
-        except Exception as ex:
-            print(ex)
+        req = self.session.put(
+            url,
+            data=self,
+            headers=headers
+        )
+        self.fileobj.close()
+        body = req.text
+        ret_dict = json.loads(body)
+        size = int(ret_dict['total_bytes'])
+        if size != info.size:  # pragma: no cover
             return False
-        # pylint: enable=broad-except
+        success = self.validate_hash()
+        print('validated = ' + str(success))
+        if not success:
+            # roll back upload
+            raise HashValidationException('File {} failed to validate.'.format(self.file_id))
 
 
 class MetaParser(object):
@@ -95,7 +100,10 @@ class MetaParser(object):
 
     def __init__(self):
         """Constructor."""
-        pass
+        self.session = requests.session()
+        retry_adapter = requests.adapters.HTTPAdapter(max_retries=5)
+        self.session.mount('https://', retry_adapter)
+        self.session.mount('http://', retry_adapter)
 
     def load_meta(self, tar, job_id):
         """Load the metadata from a tar file into searchable structures."""
@@ -132,7 +140,8 @@ class MetaParser(object):
         file_element = self.files[file_id]
         # remove filetype if there is one
         file_hash = file_element['hashsum'].replace('sha1:', '')
-        return file_hash
+        file_hash_type = file_element['hashtype']
+        return file_hash_type, file_hash
 
     def get_fname(self, file_id):
         """Get the file name from the file ID."""
@@ -167,21 +176,23 @@ class MetaParser(object):
 
             headers = {'content-type': 'application/json'}
 
-            req = requests.put(archive_url, headers=headers, data=self.meta_str)
+            req = self.session.put(archive_url, headers=headers, data=self.meta_str)
             if req.json()['status'] == 'success':
-                return True
+                return True, ''
         # pylint: disable=broad-except
-        except Exception:
-            return False
+        except Exception as ex:
+            return False, ex
         # pylint: enable=broad-except
-        return False
+        return False, req.json()
 
 
 def get_clipped(fname):
     """Return a file path with the data separator removed."""
-    if fname.startswith('data/'):
-        fname = fname[5:]
-    return fname
+    parts = fname.split('/')  # this is posix tar standard
+    if parts[0] == 'data':
+        del parts[0]
+    parts = [x for x in parts if x]
+    return '/'.join(parts)  # this is also posix tar standard
 
 
 # pylint: disable=too-few-public-methods
@@ -204,17 +215,16 @@ class TarIngester(object):
 
         for file_id in self.meta.files.keys():
             # file_id = element['id']
-            file_hash = self.meta.get_hash(file_id)
+            file_hash_type, file_hash = self.meta.get_hash(file_id)
             name = self.meta.get_fname(file_id)
 
             path = self.meta.get_subdir(file_id)+'/'+name
+            path = '/'.join(['data', get_clipped(path)])  # this is for posix tar standard
 
             info = self.tar.getmember(path.encode('utf-8'))
             print(info.name)
-            ingest = FileIngester(file_hash, archive_url, file_id)
-            if not ingest.upload_file_in_file(info, self.tar):
-                return False
-        return True
+            ingest = FileIngester(file_hash_type, file_hash, archive_url, file_id)
+            ingest.upload_file_in_file(info, self.tar)
 # pylint: enable=too-few-public-methods
 
 

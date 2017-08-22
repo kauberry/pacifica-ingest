@@ -2,7 +2,7 @@
   {
     "destinationTable": "Transactions.submitter",
     "value": 10
-  },
+  }
   {
     "destinationTable": "Transactions.proposal",
     "value": "1234a"
@@ -35,7 +35,7 @@
     "mtime": "Tue Nov 29 14:09:05 PST 2016",
     "name": "foo.txt",
     "size": 4,
-    "subdir": "data/a/b/"
+    "subdir": "data/a/b"
   },
   {
     "ctime": "Tue Nov 29 14:09:05 PST 2016",
@@ -46,7 +46,7 @@
     "mtime": "Tue Nov 29 14:09:05 PST 2016",
     "name": "bar.txt",
     "size": 4,
-    "subdir": "data//a/b"
+    "subdir": "data/a/b"
   },
   {
     "ctime": "Tue Nov 29 14:09:05 PST 2016",

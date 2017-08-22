@@ -11,4 +11,5 @@ pre-commit
 pylint
 pytest
 radon
+redis
 requests
